@@ -57,8 +57,6 @@ function App() {
 		if (!isActive) window.close();
 	}, [isActive]);
 
-	const lastResultIndexRef = useRef(0);
-
 	return (
 		<div className={styles.root}>
 			<h1>Голосовой ввод</h1>

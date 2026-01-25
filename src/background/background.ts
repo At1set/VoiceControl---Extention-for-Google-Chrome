@@ -1,24 +1,23 @@
-import { EventTypes } from './model/EventTypes';
+import type { ActionMessage, RequestMessage } from '@/lib/shared/types/message.types';
 
+import {
+	type Action,
+	type EventsPayload,
+	type RequestType,
+	RequestTypes,
+} from './model/EventTypes';
+
+// ==== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==== //
 let lastActiveTabId: number | null = null;
 let lastWindowId: number | null = null;
+// ==== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==== //
 
-// this runs when the extension is installed or updated
+// При обновлении/установке расширения, браузера
 chrome.runtime.onInstalled.addListener((details) => {
 	console.log('Welcome to chrome ext voice control. Have a nice day!');
 	if (details.reason === 'install') {
 		chrome.tabs.create({ url: chrome.runtime.getURL('src/pages/Welcome/index.html') });
 	}
-});
-
-chrome.runtime.onMessage.addListener((message) => {
-	if (!lastActiveTabId) return;
-	if (message?.type === 'isPopupOpen') {
-		chrome.tabs.update({}, async (tab) => {
-			if (!tab?.id) return;
-			chrome.tabs.sendMessage(tab.id, message);
-		});
-	} else if (message.forContentScript) chrome.tabs.sendMessage(lastActiveTabId, message);
 });
 
 initBadge();
@@ -44,16 +43,79 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 // ====================== ВКЛАДКИ ====================== //
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-	if (msg.type === EventTypes.GET_ACTIVE_TAB) {
-		console.log(`Получен запрос на получение активной вкладки: ${sender.tab?.id}`);
+chrome.runtime.onMessage.addListener(
+	<ActionType extends Action, T extends RequestType>(
+		message: ActionMessage<ActionType> | RequestMessage<T>,
+		sender: chrome.runtime.MessageSender,
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		sendResponse: (response?: any) => void,
+	) => {
+		// если сообщение для скрипта контента
+		if (message.forContentScript && lastActiveTabId)
+			return chrome.tabs.sendMessage(lastActiveTabId, message);
 
-		sendResponse({
-			isActive: sender.tab?.id === lastActiveTabId,
-		});
-	} else if (msg.action === 'OPEN_SIDE_PANEL')
-		tryOpenSidePanel({ tabId: lastActiveTabId, windowId: lastWindowId });
-});
+		const { data, type } = message;
+		switch (type) {
+			case 'action':
+				return handleActionMessage(data, sender, sendResponse);
+			case 'request':
+				return hanleRequestMessage(data, sender, sendResponse);
+		}
+	},
+);
+
+function handleActionMessage<T extends Action>(
+	message: {
+		action: T;
+		body: never;
+	},
+	_sender: chrome.runtime.MessageSender,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	_sendResponse: (response?: any) => void,
+) {
+	switch (message.action) {
+		case 'OPEN_SIDE_PANEL':
+			return tryOpenSidePanel({ tabId: lastActiveTabId, windowId: lastWindowId });
+
+		case 'GO_PREV_TAB':
+			return goPrevTab();
+
+		case 'GO_NEXT_TAB':
+			return goNextTab();
+
+		default:
+			break;
+	}
+}
+
+function hanleRequestMessage<T extends RequestType>(
+	message: {
+		requestType: T;
+		payload: EventsPayload[T];
+	},
+	sender: chrome.runtime.MessageSender,
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	sendResponse: (response?: any) => void,
+) {
+	switch (message.requestType) {
+		case 'GET_ACTIVE_TAB':
+			console.log(`Получен запрос на получение активной вкладки: ${sender.tab?.id}`);
+
+			sendResponse({
+				isActive: sender.tab?.id === lastActiveTabId,
+			});
+			break;
+
+		case 'SET_RECORDING': {
+			const isRecording = message.payload;
+			
+			break;
+		}
+
+		default:
+			break;
+	}
+}
 
 chrome.storage.local.onChanged.addListener((changes) => {
 	console.log('[storage change]', 'changes:', changes, 'stack:', new Error().stack);
@@ -61,18 +123,6 @@ chrome.storage.local.onChanged.addListener((changes) => {
 		const isRecording = changes.isRecording.newValue as boolean;
 		chrome.action.setBadgeText({ text: isRecording ? 'ON' : '' });
 		allowMicrophoneOnSite();
-	}
-});
-
-chrome.runtime.onMessage.addListener((msg) => {
-	switch (msg.action) {
-		case EventTypes.GO_PREV_TAB:
-			goPrevTab();
-			return;
-
-		case EventTypes.GO_NEXT_TAB:
-			goNextTab();
-			return;
 	}
 });
 
@@ -97,7 +147,7 @@ function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
 		console.log('Отправлен запрос на СТАРУЮ вкладку');
 
 		chrome.tabs.sendMessage(lastActiveTabId, {
-			type: EventTypes.ACTIVE_TAB_CHANGED,
+			type: 'ACTIVE_TAB_CHANGED',
 			data: {
 				isActive: false,
 			},
@@ -107,7 +157,7 @@ function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
 	console.log('Отправлен запрос на НОВУЮ вкладку');
 	// уведомляем новую вкладку
 	chrome.tabs.sendMessage(tabId, {
-		type: EventTypes.ACTIVE_TAB_CHANGED,
+		type: 'ACTIVE_TAB_CHANGED',
 		data: {
 			isActive: true,
 		},
