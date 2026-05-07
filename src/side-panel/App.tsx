@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { SpeechRecognizer } from '@/lib/components/SpeechRecognizer';
-import { useRecordingState } from '@/lib/shared/hooks/useRecordingState';
 import { createThrottle } from '@/lib/shared/utils/createThrottle';
 
 import styles from './App.module.scss';
 
 function App() {
-	const [isActive] = useRecordingState(true);
-	const [, setRecording] = useRecordingState();
 	const [recognizedText, setRecognizedText] = useState<string[]>([]);
 	const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -35,12 +32,11 @@ function App() {
 					},
 					{
 						words: ['обновить'],
-						action: () =>
-							chrome.runtime.sendMessage({ action: 'WINDOW_RELOAD', forContentScript: true }),
+						action: () => chrome.runtime.sendMessage({ action: 'WINDOW_RELOAD' }),
 					},
 					{
 						words: ['стоп'],
-						action: () => setRecording(false),
+						action: () => window.close(),
 					},
 				];
 
@@ -50,12 +46,24 @@ function App() {
 					}
 				}
 			}, 800),
-		[setRecording],
+		[],
 	);
 
 	useEffect(() => {
-		if (!isActive) window.close();
-	}, [isActive]);
+		// eslint-disable-next-line
+		function handleCloseMessage(msg: any, _: any, sendResponse: (response?: any) => void) {
+			if (msg.action === 'CLOSE_SIDEPANEL') {
+				sendResponse(true);
+				window.close();
+			}
+		}
+
+		chrome.runtime.onMessage.addListener(handleCloseMessage);
+
+		return () => {
+			chrome.runtime.onMessage.removeListener(handleCloseMessage);
+		};
+	}, []);
 
 	// const lastResultIndexRef = useRef(0);
 

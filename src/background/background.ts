@@ -1,27 +1,48 @@
+import { bus } from '@/background/bus/bus';
+import { builtInCommands } from '@/background/command-engine/built-in-commands';
+import { CommandEngine } from '@/background/command-engine/Engine';
+import type { Message } from '@/lib/shared/types/Message';
+
 import { EventTypes } from './model/EventTypes';
 
 let lastActiveTabId: number | null = null;
 let lastWindowId: number | null = null;
+const VCPage: {
+	id?: null | number;
+	windowId?: null | number;
+	url?: null | string;
+} = {};
 
 // this runs when the extension is installed or updated
 chrome.runtime.onInstalled.addListener((details) => {
 	console.log('Welcome to chrome ext voice control. Have a nice day!');
 	if (details.reason === 'install') {
+		chrome.tabs.query({}, (tabs) => {
+			tabs.forEach((tab) => {
+				if (tab.id) {
+					chrome.tabs.reload(tab.id);
+				}
+			});
+		});
 		chrome.tabs.create({ url: chrome.runtime.getURL('src/pages/Welcome/index.html') });
 	}
 });
 
-chrome.runtime.onMessage.addListener((message) => {
-	if (!lastActiveTabId) return;
-	if (message?.type === 'isPopupOpen') {
-		chrome.tabs.update({}, async (tab) => {
-			if (!tab?.id) return;
-			chrome.tabs.sendMessage(tab.id, message);
-		});
-	} else if (message.forContentScript) chrome.tabs.sendMessage(lastActiveTabId, message);
+initBadge();
+
+chrome.action.onClicked.addListener(() => {
+	openVCPage(() => startRecording());
 });
 
-initBadge();
+function openVCPage(callback?: (tab: chrome.tabs.Tab) => void) {
+	if (VCPage.id) return;
+	chrome.tabs.create({ url: 'src/pages/Welcome/index.html', active: true }, (tab) => {
+		VCPage.id = tab.id;
+		VCPage.url = tab.pendingUrl || tab.url;
+		VCPage.windowId = tab.windowId;
+		callback?.(tab);
+	});
+}
 
 // ====================== ВКЛАДКИ ====================== //
 // ==== ПРИ СМЕНЕ ВКЛАДКИ ==== //
@@ -32,57 +53,85 @@ chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
 
 // ==== ПРИ ОБНОВЛЕНИИ ВКЛАДКИ ==== //
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-	if (changeInfo.status === 'complete' && tab.active) {
+	if (changeInfo.status === 'complete' && tab.url && tab.active) {
 		updateTabs({ tabId, windowId: tab.windowId });
-		chrome.storage.local.get('isRecording', ({ isRecording }) => {
-			if (isRecording) {
-				tryOpenSidePanel({ tabId: lastActiveTabId, windowId: lastWindowId });
-				allowMicrophoneOnSite();
+		chrome.tabs.sendMessage(tabId, { action: 'checkContentScriptInjected' }, (response) => {
+			if (chrome.runtime.lastError) {
+				// Content script is not injected, so inject it
+				chrome.scripting.executeScript(
+					{
+						target: { tabId: tabId },
+						files: ['src/content-script/main.tsx.js'],
+					},
+					(res) => {
+						console.log(res);
+					},
+				);
 			}
 		});
 	}
 });
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+	if (tabId === VCPage.id) {
+		VCPage.id = null;
+		VCPage.windowId = null;
+		VCPage.url = null;
+		stopRecording();
+	}
+});
 // ====================== ВКЛАДКИ ====================== //
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-	if (msg.type === EventTypes.GET_ACTIVE_TAB) {
+chrome.runtime.onMessage.addListener(async (msg: Message, sender, sendResponse) => {
+	console.log(msg);
+
+	if (msg.type === 'GET_ACTIVE_TAB') {
 		console.log(`Получен запрос на получение активной вкладки: ${sender.tab?.id}`);
 
 		sendResponse({
 			isActive: sender.tab?.id === lastActiveTabId,
 		});
-	} else if (msg.action === 'OPEN_SIDE_PANEL')
-		tryOpenSidePanel({ tabId: lastActiveTabId, windowId: lastWindowId });
+	} else if (msg.type === 'OPEN_SIDEPANEL') {
+		try {
+			const isSuccess = await tryOpenSidePanel({ windowId: lastWindowId, tabId: lastActiveTabId });
+			sendResponse(isSuccess);
+		} catch {
+			sendResponse(false);
+		}
+	} else if (msg.type === 'event' && msg.event === 'recognizedText') {
+		const result = commandEngine.process(msg.payload);
+		if (result) {
+			const [command, payload] = result;
+			const message: Message = {
+				type: 'command',
+				command: command.emit,
+				payload,
+			};
+			chrome.runtime.sendMessage(message);
+
+			if (lastActiveTabId !== null) {
+				chrome.tabs.sendMessage(lastActiveTabId, message);
+			}
+		}
+		sendResponse();
+	}
 });
+
+const commandEngine = new CommandEngine([...builtInCommands]);
+
+bus.on('page.reload', () => {
+	if (lastActiveTabId) chrome.tabs.sendMessage(lastActiveTabId, { action: 'WINDOW_RELOAD' });
+});
+bus.on('navigation.nextTab', goNextTab);
+bus.on('navigation.previousTab', goPrevTab);
 
 chrome.storage.local.onChanged.addListener((changes) => {
 	console.log('[storage change]', 'changes:', changes, 'stack:', new Error().stack);
-	if (changes.isRecording) {
-		const isRecording = changes.isRecording.newValue as boolean;
-		chrome.action.setBadgeText({ text: isRecording ? 'ON' : '' });
-		allowMicrophoneOnSite();
-	}
-});
-
-chrome.runtime.onMessage.addListener((msg) => {
-	switch (msg.action) {
-		case EventTypes.GO_PREV_TAB:
-			goPrevTab();
-			return;
-
-		case EventTypes.GO_NEXT_TAB:
-			goNextTab();
-			return;
-	}
 });
 
 function initBadge() {
 	chrome.storage.local.get('isRecording', ({ isRecording }) => {
-		// если значение уже есть, не трогаем
-		if (typeof isRecording === 'undefined') {
-			chrome.storage.local.set({ isRecording: false });
-		}
-
+		chrome.storage.local.set({ isRecording: false });
 		chrome.action.setBadgeText({ text: isRecording ? 'ON' : '' });
 		chrome.action.setBadgeBackgroundColor({ color: '#2bd1ff' });
 	});
@@ -94,8 +143,6 @@ function initBadge() {
 function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
 	// уведомляем старую вкладку
 	if (lastActiveTabId !== null) {
-		console.log('Отправлен запрос на СТАРУЮ вкладку');
-
 		chrome.tabs.sendMessage(lastActiveTabId, {
 			type: EventTypes.ACTIVE_TAB_CHANGED,
 			data: {
@@ -104,7 +151,6 @@ function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
 		});
 	}
 
-	console.log('Отправлен запрос на НОВУЮ вкладку');
 	// уведомляем новую вкладку
 	chrome.tabs.sendMessage(tabId, {
 		type: EventTypes.ACTIVE_TAB_CHANGED,
@@ -117,24 +163,59 @@ function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
 	if (typeof windowId !== 'undefined') lastWindowId = windowId;
 }
 
+// =============== БОКОВАЯ ПАНЕЛЬ =============== //
+const SidePanel = {
+	isOpen: false,
+};
+
 async function tryOpenSidePanel(
 	{
-		windowId,
-		tabId,
+		windowId = null,
+		tabId = null,
 	}: {
-		windowId: number | null;
-		tabId: number | null;
+		windowId?: number | null;
+		tabId?: number | null;
 	},
 	onerror?: (error: unknown) => void,
-) {
-	if (windowId === null || tabId === null) return;
+): Promise<boolean> {
+	if (windowId === null && tabId === null) return false;
+
 	try {
-		await chrome.sidePanel.open({ windowId });
+		if (windowId !== null) {
+			await chrome.sidePanel.open({ windowId });
+		} else {
+			await chrome.sidePanel.open({ tabId: tabId! });
+		}
+
+		return true;
 	} catch (e) {
-		console.warn('Не удалось открыть боковую панель: ', e);
+		console.warn('Не удалось открыть боковую панель:', e);
 		onerror?.(e);
+		return false;
 	}
 }
+
+chrome.sidePanel.onOpened.addListener(() => {
+	SidePanel.isOpen = true;
+	startRecording();
+});
+
+chrome.sidePanel.onClosed.addListener(() => {
+	SidePanel.isOpen = false;
+	stopRecording();
+});
+
+async function startRecording() {
+	chrome.storage.local.set({ isRecording: true });
+	chrome.action.setBadgeText({ text: 'ON' });
+	allowMicrophoneOnSite();
+}
+
+function stopRecording() {
+	chrome.storage.local.set({ isRecording: false });
+	chrome.action.setBadgeText({ text: '' });
+}
+// =============== БОКОВАЯ ПАНЕЛЬ =============== //
 
 function allowMicrophoneOnSite() {
 	chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
