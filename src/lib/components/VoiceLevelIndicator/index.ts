@@ -1,0 +1,1 @@
+export { VoiceLevelIndicator } from './VoiceLevelIndicator';

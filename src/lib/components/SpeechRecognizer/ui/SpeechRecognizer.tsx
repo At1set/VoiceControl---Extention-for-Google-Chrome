@@ -1,18 +1,29 @@
-import { type FC, useEffect } from 'react';
+import { type FC, type ReactNode, useEffect } from 'react';
 
 import { useRecordingState } from '@/lib/shared/hooks/useRecordingState';
 
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 
 interface Props {
+	micStatus: PermissionState;
 	onStart?: () => void;
 	onEnd?: () => void;
 	onError?: (e: SpeechRecognitionErrorEvent) => void;
 	onResult?: (e: SpeechRecognitionEvent) => void;
+	fallback?: ReactNode;
 }
 
-export const SpeechRecognizer: FC<Props> = ({ onStart, onEnd, onError, onResult }) => {
+export const SpeechRecognizer: FC<Props> = ({
+	micStatus,
+	onStart,
+	onEnd,
+	onError,
+	onResult,
+	fallback,
+}) => {
 	const [isRecording] = useRecordingState();
+	const isMicAllowed = micStatus === 'granted';
+
 	const speechRecognition = useSpeechRecognition({
 		onStart() {
 			console.log('Распознавание голоса включено');
@@ -21,7 +32,7 @@ export const SpeechRecognizer: FC<Props> = ({ onStart, onEnd, onError, onResult 
 		onEnd() {
 			console.log('OnEnd');
 
-			if (isRecording) {
+			if (isRecording && isMicAllowed) {
 				try {
 					console.log('Перезапуск распознавания голоса...');
 					this.start();
@@ -38,9 +49,9 @@ export const SpeechRecognizer: FC<Props> = ({ onStart, onEnd, onError, onResult 
 	});
 
 	useEffect(() => {
-		if (!speechRecognition.current) return;
-
-		if (isRecording) {
+		if (!speechRecognition || !speechRecognition.current) return;
+		
+		if (isRecording && isMicAllowed) {
 			try {
 				speechRecognition.current.start();
 			} catch (e) {
@@ -49,7 +60,11 @@ export const SpeechRecognizer: FC<Props> = ({ onStart, onEnd, onError, onResult 
 		} else {
 			speechRecognition.current.stop();
 		}
-	}, [isRecording, speechRecognition]);
+	}, [isRecording, speechRecognition, isMicAllowed]);
 
-	return <></>;
+	return speechRecognition === undefined ? (
+		fallback || <div>Ошибка, Web Speech Api не поддерживается вашим браузером!</div>
+	) : (
+		<></>
+	);
 };

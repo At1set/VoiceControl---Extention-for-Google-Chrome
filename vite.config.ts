@@ -13,13 +13,20 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			'@': path.resolve(__dirname, './src'),
-			'@images': path.resolve(__dirname, './src/lib/shared/assets/images/index.ts'),
-			'@icons': path.resolve(__dirname, './src/lib/shared/assets/icons/index.ts'),
+			'@images': path.resolve(__dirname, './src/lib/shared/assets/images'),
+			'@icons': path.resolve(__dirname, './src/lib/shared/assets/icons'),
 		},
 	},
 	server: {
 		cors: {
 			origin: [/chrome-extension:\/\//],
+		},
+	},
+	build: {
+		rollupOptions: {
+			input: {
+				welcome: 'src/pages/Welcome/index.html',
+			},
 		},
 	},
 });

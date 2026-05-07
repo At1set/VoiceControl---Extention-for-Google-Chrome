@@ -1,0 +1,20 @@
+.root {
+  width: 150px;
+  height: 20px;
+  border: 1px solid #ccc;
+  background: linear-gradient(90deg, green, yellow, red);
+  position: relative;
+  overflow: hidden;
+}
+
+.root {
+  &__movingBox {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    background: #282b30;
+    transition: left 0.01s linear;
+  }
+}

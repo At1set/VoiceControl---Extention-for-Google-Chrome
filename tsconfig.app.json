@@ -27,7 +27,9 @@
 		"paths": {
 			"@/*": ["./src/*"],
 			"@images": ["./src/lib/shared/assets/images/index.ts"],
-			"@icons": ["./src/lib/shared/assets/icons/index.ts"]
+			"@images/*": ["./src/lib/shared/assets/images/*"],
+			"@icons": ["./src/lib/shared/assets/icons/index.ts"],
+			"@icons/*": ["./src/lib/shared/assets/icons/*"]
 		}
 	},
 	"include": ["src", "src/lib/components/SpeechRecognizer/ui/SpeechRecognizer.tsx"]

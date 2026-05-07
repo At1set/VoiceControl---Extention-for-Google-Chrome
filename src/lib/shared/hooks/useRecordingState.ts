@@ -7,12 +7,18 @@ export function useRecordingState(initialState: boolean | (() => boolean) = fals
 		chrome.storage.local.get('isRecording', ({ isRecording }: { isRecording: boolean }) => {
 			setRecording(isRecording);
 		});
-		chrome.storage.local.onChanged.addListener((changes) => {
+
+		function handleStorageChange(changes: { [key: string]: chrome.storage.StorageChange }) {
 			const { isRecording } = changes;
 			if (isRecording) {
 				setRecording(isRecording.newValue as boolean);
 			}
-		});
+		}
+		chrome.storage.local.onChanged.addListener(handleStorageChange);
+
+		return () => {
+			chrome.storage.local.onChanged.removeListener(handleStorageChange);
+		};
 	}, []);
 
 	const changeRecorgingState = useCallback(

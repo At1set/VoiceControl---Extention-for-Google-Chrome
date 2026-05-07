@@ -7,7 +7,7 @@ export default defineManifest({
 	name: pkg.name,
 	version: pkg.version,
 	action: {
-		default_popup: 'src/popup/index.html',
+		// default_popup: 'src/popup/index.html',
 		default_title: 'Описание расширения...',
 	},
 	side_panel: {
@@ -21,7 +21,7 @@ export default defineManifest({
 	content_scripts: [
 		{
 			matches: ['<all_urls>'],
-			js: ['src/content-scripts/main.tsx'],
+			js: ['src/content-script/main.tsx'],
 		},
 	],
 });

@@ -42,5 +42,6 @@ export function useSpeechRecognition({
 		};
 	}, [onEndRef, onErrorRef, onResultRef, onStartRef]);
 
+	if (!SpeechRecognition) return undefined;
 	return recognitionRef;
 }
