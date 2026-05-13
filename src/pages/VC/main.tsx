@@ -11,7 +11,7 @@ createRoot(document.getElementById('root')!).render(
 	</StrictMode>,
 );
 
-import { bus } from '@/background/bus/bus.ts';
+import { bus } from '@/lib/shared/bus.ts';
 import type { Message } from '@/lib/shared/types/Message';
 
 chrome.runtime.onMessage.addListener((message: Message, _, sendResponse) => {

@@ -1,19 +1,19 @@
 import { useEffect, useState } from 'react';
 
-import { EventTypes } from '@/background/model/EventTypes';
+import type { Message } from '../types/Message';
 
 export function useIsActiveTab() {
 	const [isActiveTab, setActiveTab] = useState(false);
 
 	useEffect(() => {
-		chrome.runtime.sendMessage({ type: EventTypes.GET_ACTIVE_TAB }, ({ isActive }) => {
+		chrome.runtime.sendMessage({ type: 'GET_ACTIVE_TAB' }, ({ isActive }) => {
 			setActiveTab(isActive);
 		});
 
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		function handleActiveTabChange(message: any) {
-			if (message.type === EventTypes.ACTIVE_TAB_CHANGED) {
-				const isActive = message.data.isActive;
+		function handleActiveTabChange(message: Message) {
+			if (message.type === 'event' && (message.event as string) === 'ACTIVE_TAB_CHANGED') {
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const isActive = message.payload as any;
 				setActiveTab(isActive);
 			}
 		}

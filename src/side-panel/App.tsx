@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { SpeechRecognizer } from '@/lib/components/SpeechRecognizer';
+import { SpeechRecognizer } from '@/lib/shared/components/SpeechRecognizer';
 import { createThrottle } from '@/lib/shared/utils/createThrottle';
 
 import styles from './App.module.scss';

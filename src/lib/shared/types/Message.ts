@@ -1,28 +1,46 @@
-import type { AppCommands } from '@/background/bus/commands';
+import type { AppCommands } from './Commands';
 
-export type Message<T extends keyof Messages = keyof Messages> =
-	| CommandMessage
-	| EventMessage
-	| (Messages[T] extends void
+/**
+ * Объект сообщения из chrome.runtime.onMessage
+ */
+export type Message = CommandMessage | EventMessage | MessageOf;
+
+// export type CommandMessage = {
+// 	[K in keyof AppCommands]: {
+// 		type: 'command';
+// 		command: K;
+// 		payload: AppCommands[K];
+// 	}
+// }[keyof AppCommands];
+
+export type CommandMessage<K extends keyof AppCommands = keyof AppCommands> =
+	K extends keyof AppCommands
+		? AppCommands[K] extends void
 			? {
-					type: T;
+					type: 'command';
+					command: K;
+					payload?: never;
 				}
 			: {
-					type: T;
-					payload: Messages[T];
-				});
+					type: 'command';
+					command: K;
+					payload: AppCommands[K];
+				}
+		: never;
 
-type CommandMessage<T extends keyof AppCommands = keyof AppCommands> = {
-	type: 'command';
-	command: T;
-	payload: AppCommands[T];
-};
-
-type EventMessage<T extends keyof Events = keyof Events> = {
-	type: 'event';
-	event: T;
-	payload: Events[T];
-};
+export type EventMessage<K extends keyof Events = keyof Events> = K extends keyof Events
+	? Events[K] extends void
+		? {
+				type: 'event';
+				event: K;
+				payload?: never;
+			}
+		: {
+				type: 'event';
+				event: K;
+				payload: Events[K];
+			}
+	: never;
 
 type Messages = {
 	checkContentScriptInjected: 'injected';
@@ -34,6 +52,18 @@ type Messages = {
 	GO_NEXT_TAB: void;
 	GO_PREV_TAB: void;
 };
+
+type MessageOf<T extends keyof Messages = keyof Messages> = T extends keyof Messages
+	? Messages[T] extends void
+		? {
+				type: T;
+				payload?: never;
+			}
+		: {
+				type: T;
+				payload: Messages[T];
+			}
+	: never;
 
 type Events = {
 	recognizedText: string;

@@ -3,8 +3,8 @@ import clsx from 'clsx';
 import { useEffect, useRef, useState } from 'react';
 
 import { version } from '@/../package.json';
-import { SpeechRecognizer } from '@/lib/components/SpeechRecognizer';
-import { VoiceLevelIndicator } from '@/lib/components/VoiceLevelIndicator';
+import { SpeechRecognizer } from '@/lib/shared/components/SpeechRecognizer';
+import { VoiceLevelIndicator } from '@/lib/shared/components/VoiceLevelIndicator';
 import type { Message } from '@/lib/shared/types/Message';
 
 import styles from './App.module.scss';

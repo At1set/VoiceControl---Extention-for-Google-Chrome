@@ -1,7 +1,7 @@
-import { bus } from '@/background/bus/bus';
-import { builtInCommands } from '@/background/command-engine/built-in-commands';
-import { CommandEngine } from '@/background/command-engine/Engine';
-import type { Message } from '@/lib/shared/types/Message';
+import { builtInCommands } from '@/domain/builtInCommands';
+import { CommandEngine } from '@/domain/CommandEngine';
+import { bus } from '@/lib/shared/bus';
+import type { CommandMessage, Message } from '@/lib/shared/types/Message';
 
 // ==== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==== //
 let lastActiveTabId: number | null = null;
@@ -23,7 +23,7 @@ chrome.runtime.onInstalled.addListener((details) => {
 				}
 			});
 		});
-		chrome.tabs.create({ url: chrome.runtime.getURL('src/pages/Welcome/index.html') });
+		chrome.tabs.create({ url: 'src/pages/VC/index.html' });
 	}
 });
 
@@ -35,7 +35,7 @@ chrome.action.onClicked.addListener(() => {
 
 function openVCPage(callback?: (tab: chrome.tabs.Tab) => void) {
 	if (VCPage.id) return;
-	chrome.tabs.create({ url: 'src/pages/Welcome/index.html', active: true }, (tab) => {
+	chrome.tabs.create({ url: 'src/pages/VC/index.html', active: true }, (tab) => {
 		VCPage.id = tab.id;
 		VCPage.url = tab.pendingUrl || tab.url;
 		VCPage.windowId = tab.windowId;
@@ -54,7 +54,7 @@ chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 	if (changeInfo.status === 'complete' && tab.url && tab.active) {
 		updateTabs({ tabId, windowId: tab.windowId });
-		chrome.tabs.sendMessage(tabId, { action: 'checkContentScriptInjected' }, (response) => {
+		chrome.tabs.sendMessage(tabId, { type: 'checkContentScriptInjected' }, (response) => {
 			if (chrome.runtime.lastError) {
 				// Content script is not injected, so inject it
 				chrome.scripting.executeScript(
@@ -101,11 +101,17 @@ chrome.runtime.onMessage.addListener(async (msg: Message, sender, sendResponse) 
 		const result = commandEngine.process(msg.payload);
 		if (result) {
 			const [command, payload] = result;
+			/**
+			 * emit command
+			 */
+			bus.emit(command.emit, payload);
+
 			const message: Message = {
 				type: 'command',
 				command: command.emit,
 				payload,
-			};
+			} as CommandMessage;
+
 			chrome.runtime.sendMessage(message);
 
 			if (lastActiveTabId !== null) {

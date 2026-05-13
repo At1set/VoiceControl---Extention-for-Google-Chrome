@@ -1,6 +1,5 @@
+import { bus } from '@/lib/shared/bus';
 import type { Message } from '@/lib/shared/types/Message';
-
-import { bus } from '../background/bus/bus';
 
 chrome.runtime.onMessage.addListener((message: Message, _, sendResponse) => {
 	if (message.type === 'checkContentScriptInjected') sendResponse('injected');

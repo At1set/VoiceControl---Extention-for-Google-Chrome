@@ -1,25 +1,6 @@
-import type { AppCommands } from '../bus/commands';
+import type { VoiceCommand } from "@/lib/shared/types/Commands";
 
-export type BuiltInCommand<Event extends keyof AppCommands = keyof AppCommands> = {
-	id: string;
-
-	/**
-	 * Регулярное выражение команды
-	 */
-	pattern: RegExp;
-
-	/**
-	 * Какое событие эмитим в bus
-	 */
-	emit: Event;
-
-	/**
-	 * Трансформация regex match → payload
-	 */
-	transform?: (match: RegExpMatchArray) => AppCommands[Event];
-};
-
-export const builtInCommands: BuiltInCommand[] = [
+export const builtInCommands: VoiceCommand[] = [
 	/**
 	 * Остановить запись голоса
 	 */

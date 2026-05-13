@@ -1,14 +1,13 @@
-import type { AppCommands } from '../bus/commands';
-import type { BuiltInCommand } from './built-in-commands';
+import type { AppCommands, VoiceCommand } from '@/lib/shared/types/Commands';
 
 export type MatchResult<Event extends keyof AppCommands = keyof AppCommands> = {
-	command: BuiltInCommand<Event>;
+	command: VoiceCommand<Event>;
 
 	match: RegExpMatchArray;
 };
 
 export class Matcher {
-	match(text: string, commands: BuiltInCommand[]): MatchResult | null {
+	match(text: string, commands: VoiceCommand[]): MatchResult | null {
 		for (const command of commands) {
 			const match = text.match(command.pattern);
 			if (!match) continue;

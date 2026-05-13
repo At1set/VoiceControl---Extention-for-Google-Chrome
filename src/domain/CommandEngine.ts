@@ -1,13 +1,17 @@
-import { bus } from '../bus/bus';
-import type { BuiltInCommand } from './built-in-commands';
+import type { VoiceCommand } from '@/lib/shared/types/Commands';
+
 import { Matcher } from './Matcher';
 import { normalizeSpeech } from './normalizeSpeech';
 
 export class CommandEngine {
 	private matcher = new Matcher();
-	private commands: BuiltInCommand[];
+	private commands: VoiceCommand[];
 
-	constructor(commands: BuiltInCommand[]) {
+	constructor(commands: VoiceCommand[]) {
+		this.commands = commands;
+	}
+
+	updateCommands(commands: VoiceCommand[]) {
 		this.commands = commands;
 	}
 
@@ -38,12 +42,6 @@ export class CommandEngine {
 		const payload = command.transform ? command.transform(match) : undefined;
 
 		console.log('[CommandEngine] matched:', command, payload);
-
-		/**
-		 * emit command
-		 */
-		bus.emit(command.emit, payload);
-
 		return [command, payload] as const;
 	}
 }
