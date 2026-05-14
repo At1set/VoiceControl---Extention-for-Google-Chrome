@@ -22,4 +22,4 @@ chrome.runtime.onMessage.addListener((message: Message, _, sendResponse) => {
 	}
 });
 
-bus.on('stop', window.close);
+import './features/stop.ts';

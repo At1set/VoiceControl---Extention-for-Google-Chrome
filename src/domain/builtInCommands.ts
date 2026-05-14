@@ -1,4 +1,4 @@
-import type { VoiceCommand } from "@/lib/shared/types/Commands";
+import type { AppCommands, VoiceCommand } from '@/lib/shared/types/Commands';
 
 export const builtInCommands: VoiceCommand[] = [
 	/**
@@ -38,15 +38,74 @@ export const builtInCommands: VoiceCommand[] = [
 	{
 		id: 'page.scroll',
 
-		pattern: /^(прокрути|листай|скролл(ни)?)( страницу)? (?<direction>вверх|вниз)$/iu,
+		pattern: (() => {
+			const DIRECTION =
+				'вверх|вниз|влево|вправо|в самый верх|в самый низ|в самое лево|в самое право|полностью вверх|полностью вниз|полностью вправо|полностью влево';
+
+			const COMMAND =
+				'(?:' + 'прокрути(?:ть)?|' + 'лист(?:ай|ни)?|' + 'скрол(?:л|ь)(?:ни|нуть)?' + ')';
+
+			const PIXELS = (i: 1 | 2) => `(?<pixels${i}>\\d+)\\s*(?:px|пикс(?:елей|еля|ель)?)?`;
+
+			const reg = new RegExp(
+				'^' +
+					COMMAND +
+					'(?:\\s+страницу)?' +
+					'(?:\\s+ещ(?:е|ё))?' +
+					'\\s+' +
+					'(?:' +
+					// вверх [на] 600 пикселей
+					`(?<direction1>${DIRECTION})` +
+					`(?:\\s+(?:на\\s+)?${PIXELS(1)})?` +
+					'|' +
+					// [на] 600 пикселей вверх
+					`(?:на\\s+)?${PIXELS(2)}` +
+					`\\s+(?<direction2>${DIRECTION})` +
+					')' +
+					'$',
+				'iu',
+			);
+
+			return reg;
+		})(),
 
 		emit: 'page.scroll',
 
 		transform(match) {
-			const direction = match.groups?.direction;
+			console.dir(match.groups);
+
+			const directionMatch = match.groups?.direction1 || match.groups?.direction2;
+
+			const pixelsRaw = match.groups?.pixels1 || match.groups?.pixels2;
+			console.log(directionMatch);
+
+			const map: Record<string, AppCommands['page.scroll']['direction']> = {
+				вверх: 'up',
+				'в самый верх': 'top',
+				'полностью вверх': 'top',
+
+				вниз: 'down',
+				'в самый низ': 'bottom',
+				'полностью вниз': 'bottom',
+
+				вправо: 'right',
+				'в самое право': 'far-right',
+				'полностью вправо': 'far-right',
+
+				влево: 'left',
+				'в самое лево': 'far-left',
+				'полностью влево': 'far-left',
+			};
+
+			const direction = map[directionMatch ?? ''] ?? 'down';
+
+			const defaultPixels = direction === 'left' || direction === 'right' ? 150 : 500;
+
+			const pixels = Number(pixelsRaw ?? defaultPixels);
 
 			return {
-				direction: direction === 'вверх' ? 'up' : 'down',
+				direction,
+				pixels,
 			};
 		},
 	},

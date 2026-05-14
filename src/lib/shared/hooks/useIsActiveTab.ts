@@ -10,11 +10,16 @@ export function useIsActiveTab() {
 			setActiveTab(isActive);
 		});
 
-		function handleActiveTabChange(message: Message) {
-			if (message.type === 'event' && (message.event as string) === 'ACTIVE_TAB_CHANGED') {
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const isActive = message.payload as any;
+		function handleActiveTabChange(
+			message: Message,
+			_: chrome.runtime.MessageSender,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			sendResponse: (response?: any) => void,
+		) {
+			if (message.type === 'event' && message.event === 'ACTIVE_TAB_CHANGED') {
+				const { isActive } = message.payload;
 				setActiveTab(isActive);
+				sendResponse();
 			}
 		}
 

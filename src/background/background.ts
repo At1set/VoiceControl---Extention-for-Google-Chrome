@@ -3,14 +3,7 @@ import { CommandEngine } from '@/domain/CommandEngine';
 import { bus } from '@/lib/shared/bus';
 import type { CommandMessage, Message } from '@/lib/shared/types/Message';
 
-// ==== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==== //
-let lastActiveTabId: number | null = null;
-let lastWindowId: number | null = null;
-const VCPage: {
-	id?: null | number;
-	windowId?: null | number;
-	url?: null | string;
-} = {};
+import { State } from './utils/State';
 
 // При обновлении/установке расширения, браузера
 chrome.runtime.onInstalled.addListener((details) => {
@@ -33,12 +26,17 @@ chrome.action.onClicked.addListener(() => {
 	openVCPage(() => startRecording());
 });
 
-function openVCPage(callback?: (tab: chrome.tabs.Tab) => void) {
-	if (VCPage.id) return;
-	chrome.tabs.create({ url: 'src/pages/VC/index.html', active: true }, (tab) => {
-		VCPage.id = tab.id;
-		VCPage.url = tab.pendingUrl || tab.url;
-		VCPage.windowId = tab.windowId;
+async function openVCPage(callback?: (tab: chrome.tabs.Tab) => void) {
+	const state = await State.getState();
+	if (state.VCPage.id) return;
+	
+	chrome.tabs.create({ url: 'src/pages/VC/index.html', active: true }, async (tab) => {
+		await State.patchVCPage({
+			id: tab.id ?? null,
+			windowId: tab.windowId ?? null,
+			url: tab.pendingUrl || tab.url || null,
+		});
+
 		callback?.(tab);
 	});
 }
@@ -71,11 +69,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 	}
 });
 
-chrome.tabs.onRemoved.addListener((tabId) => {
-	if (tabId === VCPage.id) {
-		VCPage.id = null;
-		VCPage.windowId = null;
-		VCPage.url = null;
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+	const state = await State.getState();
+	console.log(state, tabId);
+
+	if (tabId === state.VCPage.id) {
+		await State.patchVCPage({
+			id: null,
+			windowId: null,
+			url: null,
+		});
+
 		stopRecording();
 	}
 });
@@ -83,16 +87,20 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 chrome.runtime.onMessage.addListener(async (msg: Message, sender, sendResponse) => {
 	console.log(msg);
+	const state = await State.getState();
 
 	if (msg.type === 'GET_ACTIVE_TAB') {
 		console.log(`Получен запрос на получение активной вкладки: ${sender.tab?.id}`);
 
 		sendResponse({
-			isActive: sender.tab?.id === lastActiveTabId,
+			isActive: sender.tab?.id === state.lastActiveTabId,
 		});
 	} else if (msg.type === 'OPEN_SIDEPANEL') {
 		try {
-			const isSuccess = await tryOpenSidePanel({ windowId: lastWindowId, tabId: lastActiveTabId });
+			const isSuccess = await tryOpenSidePanel({
+				windowId: state.lastWindowId,
+				tabId: state.lastActiveTabId,
+			});
 			sendResponse(isSuccess);
 		} catch {
 			sendResponse(false);
@@ -114,8 +122,8 @@ chrome.runtime.onMessage.addListener(async (msg: Message, sender, sendResponse) 
 
 			chrome.runtime.sendMessage(message);
 
-			if (lastActiveTabId !== null) {
-				chrome.tabs.sendMessage(lastActiveTabId, message);
+			if (state.lastActiveTabId !== null) {
+				chrome.tabs.sendMessage(state.lastActiveTabId, message);
 			}
 		}
 		sendResponse();
@@ -123,12 +131,8 @@ chrome.runtime.onMessage.addListener(async (msg: Message, sender, sendResponse) 
 });
 
 const commandEngine = new CommandEngine([...builtInCommands]);
-
-bus.on('page.reload', () => {
-	if (lastActiveTabId) chrome.tabs.sendMessage(lastActiveTabId, { action: 'WINDOW_RELOAD' });
-});
-bus.on('navigation.nextTab', goNextTab);
-bus.on('navigation.previousTab', goPrevTab);
+import './features/closePage';
+import './features/tab-navigation';
 
 chrome.storage.local.onChanged.addListener((changes) => {
 	console.log('[storage change]', 'changes:', changes, 'stack:', new Error().stack);
@@ -145,10 +149,11 @@ function initBadge() {
 /**
  * Обновить активную вкладку
  */
-function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
+async function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
+	const state = await State.getState();
 	// уведомляем старую вкладку
-	if (lastActiveTabId !== null) {
-		chrome.tabs.sendMessage(lastActiveTabId, {
+	if (state.lastActiveTabId !== null) {
+		chrome.tabs.sendMessage(state.lastActiveTabId, {
 			type: 'ACTIVE_TAB_CHANGED',
 			data: {
 				isActive: false,
@@ -164,8 +169,10 @@ function updateTabs({ tabId, windowId }: { tabId: number; windowId?: number }) {
 		},
 	});
 
-	lastActiveTabId = tabId;
-	if (typeof windowId !== 'undefined') lastWindowId = windowId;
+	await State.setState({
+		lastActiveTabId: tabId,
+		lastWindowId: windowId ?? state.lastWindowId,
+	});
 }
 
 // =============== БОКОВАЯ ПАНЕЛЬ =============== //
@@ -250,33 +257,5 @@ function allowMicrophoneOnSite() {
 				}
 			},
 		);
-	});
-}
-
-function goPrevTab() {
-	if (lastActiveTabId == null || lastWindowId == null) return;
-
-	chrome.tabs.query({ windowId: lastWindowId }, (tabs) => {
-		const index = tabs.findIndex((t) => t.id === lastActiveTabId);
-		if (index === -1) return;
-
-		const prevTab = tabs[index - 1] ?? tabs[tabs.length - 1]; // зацикливание
-		if (!prevTab.id) return;
-
-		chrome.tabs.update(prevTab.id, { active: true });
-	});
-}
-
-function goNextTab() {
-	if (lastActiveTabId == null || lastWindowId == null) return;
-
-	chrome.tabs.query({ windowId: lastWindowId }, (tabs) => {
-		const index = tabs.findIndex((t) => t.id === lastActiveTabId);
-		if (index === -1) return;
-
-		const nextTab = tabs[index + 1] ?? tabs[0]; // зацикливание
-		if (nextTab.id) {
-			chrome.tabs.update(nextTab.id, { active: true });
-		}
 	});
 }

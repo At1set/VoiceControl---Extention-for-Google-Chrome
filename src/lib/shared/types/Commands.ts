@@ -16,7 +16,8 @@ export type AppCommands = {
 	stop: void;
 
 	'page.scroll': {
-		direction: 'up' | 'down';
+		direction: 'up' | 'down' | 'top' | 'bottom' | 'left' | 'far-left' | 'right' | 'far-right';
+		pixels: number;
 	};
 
 	'navigation.nextTab': void;

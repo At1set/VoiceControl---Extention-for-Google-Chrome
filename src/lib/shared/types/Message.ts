@@ -67,4 +67,7 @@ type MessageOf<T extends keyof Messages = keyof Messages> = T extends keyof Mess
 
 type Events = {
 	recognizedText: string;
+	ACTIVE_TAB_CHANGED: {
+		isActive: boolean;
+	};
 };
